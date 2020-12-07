@@ -2,17 +2,17 @@
 
 Web server sviluppato in Java.
 Sono gestiti i seguenti codici HTTP:
-**404 file not found**
-**501 not supported**
-**301 redirect**
+1)**404 file not found**
+2)**501 not supported**
+3)**301 redirect**
 Attualmente in sviluppo.
 
 
 Web server developed using Java.
 the following HTTP codes are handled properly:
-**404 file not found**
-**501 not supported**
-**301 redirect**
+1)**404 file not found**
+2)**501 not supported**
+3)**301 redirect**
 Work in progress.
 
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/StrapDown.js/graphs/commit-activity)
