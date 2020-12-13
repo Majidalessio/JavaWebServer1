@@ -1,4 +1,4 @@
-package meucci.webserver1;
+package webserver;
 /**
  * small java web server made in order to try some HTTP returning codes.
  * the class generates a new thread for each connection. 
@@ -6,21 +6,25 @@ package meucci.webserver1;
  */
 import java.io.*;
 import java.net.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 
-// Each Client Connection will be managed in a dedicated Thread
-public class WebServer implements Runnable
-{ 	
-    static final File appo=new File("");
-    static final String PATH=appo.getAbsolutePath();
-    static final File WEB_ROOT = new File(PATH+"\\src\\main\\java\\meucci\\websources");
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+
+public class WebServer implements Runnable { 	
+    static final File standardFile = new File("");
+    static final String PATH = standardFile.getAbsolutePath();
+    static final File WEB_ROOT = new File (PATH + "\\src\\main\\java\\meucci\\websources");
+    static final int PORT = 8080;
+    static final String METHOD_NOT_SUPPORTED = "not_supported.html";
+    static final String FILE_MOVED = "301.html";
     static final String DEFAULT_FILE = "index.html";
     static final String FILE_NOT_FOUND = "404.html";
-    static final String METHOD_NOT_SUPPORTED = "not_supported.html";
-    static final String FILE_MOVED="301.html";
-    static final int PORT = 8080;       //port to listen connection
-    static final boolean verbose = true;       //verbose mode
-    private Socket SC;     // Client Connection via Socket Class
+    static final boolean verbose = true;
+    private Socket SC;
     
     /**
      * constructor method
@@ -32,7 +36,7 @@ public class WebServer implements Runnable
     }
 
     /**
-     * main method that runs thread once a connection is established
+     * Main method
      * @param args 
      */
     public static void main(String[] args) 
@@ -41,15 +45,17 @@ public class WebServer implements Runnable
         {
             ServerSocket serverConnect = new ServerSocket(PORT);
             System.out.println("Server started.\nListening for connections on port : " + PORT + " ...\n");
-            // we listen until user halts server execution
-            while (true)      //infinite loop
+            
+            while (true)      // Always true, a loop to check for incoming connections
             {
                 WebServer myServer = new WebServer(serverConnect.accept());
                 if (verbose) 
                 {
                     System.out.println("Connecton opened. (" + new Date() + ")");
                 }
-                //create dedicated thread to manage the client connection
+                
+                // Once a user connects, create and
+                // run a new thread
                 Thread thread = new Thread(myServer);
                 thread.start();
             }
@@ -61,77 +67,99 @@ public class WebServer implements Runnable
     }
     
     /**
-     * run method, override of the run method in the Runnable class
+     * Thread Run method
      */
-    @Override
     public void run() 
     {
-        // we manage our particular client connection
-        BufferedReader in = null;       //variable used for the client's input
-        PrintWriter out = null;         //
-        BufferedOutputStream dataOut = null;    //   
+        BufferedReader in = null;
+        PrintWriter out = null;
+        BufferedOutputStream dataOut = null;
         String fileRequested = null;
+        
+        // Serialization/deserialization
+        ObjectMapper objectMapper = new ObjectMapper();
+        XmlMapper xmlMapper = new XmlMapper();
+        
         try 
         {
-            //we read characters from the client via input stream on the socket
+        	// Input and Output
             in = new BufferedReader(new InputStreamReader(SC.getInputStream()));
-            //we get character output stream to client (for headers)
             out = new PrintWriter(SC.getOutputStream());
-            //get binary output stream to client (for requested data)
             dataOut = new BufferedOutputStream(SC.getOutputStream());
-            //get first line of the request from the client
+
             String input = in.readLine();
-            //we parse the request with a string tokenizer
             StringTokenizer parse = new StringTokenizer(input);
-            //we get the HTTP method of the client
             String method = parse.nextToken().toUpperCase(); 
-            //we get file requested
+
             fileRequested = parse.nextToken().toLowerCase();
-            //we support only GET and HEAD methods, we check
-            if (!method.equals("GET")  &&  !method.equals("HEAD")) 
+            if (!method.equals("GET") && !method.equals("HEAD")) 
             {
                 if (verbose) 
                 {
                     System.out.println("501 Not Implemented : " + method + " method.");
                 }
-                //we return the not supported file to the client
+                
+                
                 File file = new File(WEB_ROOT, METHOD_NOT_SUPPORTED);
                 int fileLength = (int) file.length();
                 String contentMimeType = "text/html";
-                byte[] fileData = readFileData(file, fileLength);   //read content to return to client
-                //we send HTTP Headers with data to client
+                byte[] fileData = readFileData(file, fileLength);
+                
                 out.println("HTTP/1.1 501 Not Implemented");
                 out.println("Server: Java HTTP Server from SSaurel : 1.0");
                 out.println("Date: " + new Date());
-                out.println("Content-type: " + contentMimeType);
-                out.println("Content-length: " + fileLength);
-                out.println();  //blank line between headers and content, very important !
-                out.flush();   //flush character output stream buffer
-                //file data
+                out.println("Content-Type: " + contentMimeType);
+                out.println("Content-Length: " + fileLength);
+                out.println();
+                out.flush();
+                
                 dataOut.write(fileData, 0, fileLength);
                 dataOut.flush();
             } 
             else 
             {
-                //GET or HEAD method
+            	// Check ending character
                 if (fileRequested.endsWith("/")) 
                 {
                     fileRequested += DEFAULT_FILE;
                 }
+                
                 File file = new File(WEB_ROOT, fileRequested);
                 int fileLength = (int) file.length();
                 String content = getContentType(fileRequested);
-                if (method.equals("GET")) // GET method so we return content
+                
+                if (fileRequested.contains("puntiVendita.json")) {
+                	
+                	String jsonString = null;
+                	
+                	try {
+						jsonString = readFileAsString("resources/puntiVendita.json");
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+                	
+                	List<PuntoVendita> listPuntiVendita = objectMapper.readValue(jsonString, new TypeReference<List<PuntoVendita>>(){});
+                	ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                    xmlMapper.writeValue(byteArrayOutputStream, listPuntiVendita);
+                    
+                    file = new File("puntiVendita.xml");
+                    fileLength = (int) file.length();
+                    content = "text/xml";
+                }
+
+                
+                if (method.equals("GET"))
                 { 
                     byte[] fileData = readFileData(file, fileLength);
-                    //send HTTP Headers
+                    
+                    // HTTP Response
                     out.println("HTTP/1.1 200 OK");
                     out.println("Server: Java HTTP Server from SSaurel : 1.0");
                     out.println("Date: " + new Date());
-                    out.println("Content-type: " + content);
-                    out.println("Content-length: " + fileLength);
-                    out.println(); // blank line between headers and content, very important !
-                    out.flush(); // flush character output stream buffer
+                    out.println("Content-Type: " + content);
+                    out.println("Content-Length: " + fileLength);
+                    out.println();
+                    out.flush();
                     dataOut.write(fileData, 0, fileLength);
                     dataOut.flush();
                 }
@@ -141,25 +169,27 @@ public class WebServer implements Runnable
                 }
             }
         } 
+        // Exception if the file does not exist
         catch (FileNotFoundException fnfe) 
         {
             try 
             {
-                String[] path=fileRequested.split("/");     //array used in order to store the path
-                int nPath=path.length;
-                String choosenObj=path[nPath-1];
-                if(choosenObj.lastIndexOf(".")==-1)         //if the lastIndexOf method return -1 then the noSlash method is called and the hint given to the client will be PATH+/
+            	// String array
+                String[] path = fileRequested.split("/");
+                int nPath = path.length;
+                String choosenObj = path[nPath-1];
+                if (choosenObj.lastIndexOf(".") == -1)
                 {
-                    noSlash(out,dataOut,fileRequested+"/");
+                    movedPermanently(out,dataOut,fileRequested + "/");
                 }
                 else
                 {
-                    fileNotFound(out, dataOut, fileRequested);      //otherwise the called method will be file not found
+                    fileNotFound(out, dataOut, fileRequested);
                 }
             } 
             catch (IOException ioe) 
             {
-                System.err.println("Error with file not found exception : " + ioe.getMessage());
+                System.err.println("Exception generated in input/output: " + ioe.getMessage());
             }
         }
         catch (IOException ioe)
@@ -173,7 +203,7 @@ public class WebServer implements Runnable
                 in.close();
                 out.close();
                 dataOut.close();
-                SC.close();     //we close socket connection
+                SC.close();
             } 
             catch (Exception e) 
             {
@@ -188,7 +218,7 @@ public class WebServer implements Runnable
     }
     
     /**
-     * method used in order to read data from a file
+     * Reads data from a file
      * @param file
      * @param fileLength
      * @return
@@ -214,7 +244,7 @@ public class WebServer implements Runnable
     }
 
     /**
-     * method used in order to return supported MIME Types
+     * Returns supported file types
      * @param fileRequested
      * @return 
      */
@@ -235,7 +265,7 @@ public class WebServer implements Runnable
     }
     
     /**
-     * method used to print the file not found code 404 from the HTTP protocol
+     * Prints HTTP response 404
      * @param out
      * @param dataOut
      * @param fileRequested
@@ -247,13 +277,15 @@ public class WebServer implements Runnable
         int fileLength = (int) file.length();
         String content = "text/html";
         byte[] fileData = readFileData(file, fileLength);
+        
+        // HTTP Request 404
         out.println("HTTP/1.1 404 File Not Found");
         out.println("Server: Java HTTP Server from SSaurel : 1.0");
         out.println("Date: " + new Date());
         out.println("Content-type: " + content);
         out.println("Content-length: " + fileLength);
-        out.println(); // blank line between headers and content, very important !
-        out.flush(); // flush character output stream buffer
+        out.println();
+        out.flush();
         dataOut.write(fileData, 0, fileLength);
         dataOut.flush();
         if (verbose)
@@ -263,32 +295,39 @@ public class WebServer implements Runnable
     }
     
     /**
-     * method used in order to give an hint to the client if he requests a path without the ending /
+     * Prints HTTP response 301
      * @param out
      * @param dataOut
      * @param directoryRequested
      * @throws IOException 
      */
-    private void noSlash (PrintWriter out, OutputStream dataOut,String directoryRequested) throws IOException
+    private void movedPermanently(PrintWriter out, OutputStream dataOut, String directory) throws IOException
     {
         File file = new File(WEB_ROOT, FILE_MOVED);
         int fileLength = (int) file.length();
         String content = "text/html";
         byte[] fileData = readFileData(file, fileLength);
+        
+        // Creation of the 301 response
         out.println("HTTP/1.1 301 Moved Permanently");
         out.println("Server: Java HTTP Server from SSaurel : 1.0");
         out.println("Date: " + new Date());
-        out.println("Content-type: " + content);
-        out.println("Content-length: " + fileLength);
-        out.println("Location: "+directoryRequested);   //path with the / added printed as an hint for the user in order to reach the right location
-        out.println();  // blank line between headers and content, very important !
-        out.flush();    // flush character output stream buffer
+        out.println("Content-Type: " + content);
+        out.println("Content-Length: " + fileLength);
+        out.println("Location: " + directory);
+        out.println();
+        out.flush();
         dataOut.write(fileData, 0, fileLength);
         dataOut.flush();
         if (verbose) 
         {
-            System.out.println("Directory " + directoryRequested + " hint sended");
+            System.out.println("Directory " + directory + " hint sended");
         }
+    }
+    
+    public static String readFileAsString(String file)throws Exception
+    {
+        return new String(Files.readAllBytes(Paths.get(file)));
     }
 
 }
