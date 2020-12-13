@@ -1,4 +1,4 @@
-package webserver;
+package meucci.webserver;
 /**
  * small java web server made in order to try some HTTP returning codes.
  * the class generates a new thread for each connection. 
