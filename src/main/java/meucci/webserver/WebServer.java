@@ -8,9 +8,16 @@ import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.*;
 
+import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
@@ -24,6 +31,8 @@ public class WebServer implements Runnable {
     static final String DEFAULT_FILE = "index.html";
     static final String FILE_NOT_FOUND = "404.html";
     static final boolean verbose = true;
+    private Connection con;
+    private Statement stmt;
     private Socket SC;
     
     /**
@@ -59,6 +68,7 @@ public class WebServer implements Runnable {
                 Thread thread = new Thread(myServer);
                 thread.start();
             }
+            
         } 
         catch (IOException e) 
         {
@@ -79,6 +89,15 @@ public class WebServer implements Runnable {
         // Serialization/deserialization
         ObjectMapper objectMapper = new ObjectMapper();
         XmlMapper xmlMapper = new XmlMapper();
+        
+        // Database connection
+        try {
+			this.con = DriverManager.getConnection("jdbc:mysql://localhost:3306/quintab_condominio?serverTimezone=UTC","root","passwordprova1");
+			this.stmt = con.createStatement();  
+		} catch (SQLException e1) {
+			e1.printStackTrace();
+		}
+        
         
         try 
         {
@@ -128,7 +147,7 @@ public class WebServer implements Runnable {
                 int fileLength = (int) file.length();
                 String content = getContentType(fileRequested);
                 
-                if (fileRequested.contains("puntiVendita.json")) {
+                if (fileRequested.contains("puntiVendita.xml")) {
                 	
                 	String jsonString = null;
                 	
@@ -145,6 +164,38 @@ public class WebServer implements Runnable {
                     file = new File("puntiVendita.xml");
                     fileLength = (int) file.length();
                     content = "text/xml";
+                }
+                
+                if (fileRequested.endsWith("/db/json")) {
+                	// Base ResultSet
+                    ResultSet rs;
+                    
+					try {
+						// Fill ResultSet with database information
+						rs = stmt.executeQuery("SELECT nome,cognome FROM user");
+	                	file = this.resultSetToJson(rs);
+					} catch (SQLException e) {
+						e.printStackTrace();
+					} 
+					
+					fileLength = (int) file.length();
+					content = "application/json";
+                }
+                
+                if (fileRequested.endsWith("/db/xml")) {
+                	// Base ResultSet
+                    ResultSet rs;
+                    
+					try {
+						// Fill ResultSet with database information
+						rs = stmt.executeQuery("SELECT nome,cognome FROM user");
+	                	file = this.resultSetToXml(rs);
+					} catch (SQLException e) {
+						e.printStackTrace();
+					} 
+					
+					fileLength = (int) file.length();
+					content = "text/xml";
                 }
 
                 
@@ -329,5 +380,48 @@ public class WebServer implements Runnable {
     {
         return new String(Files.readAllBytes(Paths.get(file)));
     }
+    
+    public File resultSetToJson(ResultSet rs) throws SQLException, JsonGenerationException, JsonMappingException, IOException {
+    	File file = new File("userList.json");
+    	List<User> list = new ArrayList<User>();
+    	rs = this.stmt.executeQuery("SELECT userid, username FROM USER");
 
+    	// Fetch each row from the result set
+    	while (rs.next()) {
+    	  String nome = rs.getString("nome");
+    	  String cognome = rs.getString("cognome");
+
+    	  // Create user object to pass into the list
+    	  User user = new User(nome, cognome);
+
+    	  list.add(user);
+    	}
+
+    	ObjectMapper objectMapper = new ObjectMapper();
+    	objectMapper.writeValue(file, list);
+    	
+    	return file;
+  }
+    
+    public File resultSetToXml(ResultSet rs) throws SQLException, JsonGenerationException, JsonMappingException, IOException {
+    	File file = new File("userList.xml");
+        XmlMapper xmlMapper = new XmlMapper();
+    	List<User> list = new ArrayList<User>();
+    	rs = this.stmt.executeQuery("SELECT userid, username FROM USER");
+
+    	// Fetch each row from the result set
+    	while (rs.next()) {
+    	  String nome = rs.getString("nome");
+    	  String cognome = rs.getString("cognome");
+
+    	  // Create user object to pass into the list
+    	  User user = new User(nome, cognome);
+
+    	  list.add(user);
+    	}
+    	
+        xmlMapper.writeValue(file, list);
+    	
+    	return file;
+  }
 }
